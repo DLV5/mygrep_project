@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <filesystem>
+#include <algorithm>
 
 using namespace std;
 
@@ -93,44 +94,52 @@ void processSettings(string settingsString, settings* programSettings)
         settingsString = settingsString.substr(1);
     }
 }
+
 //0 - no string appearence
 //1 or above - string index
-int searchAString(string searchFrom, string whatToSearch)
+int searchAString(string searchFrom, string whatToSearch, settings programSettings)
 {
     int position = 0;
 
     size_t result = searchFrom.find(whatToSearch, position);
 
-    return result == string::npos ? 0 : result;
+    if(programSettings.isReverceSearchEnabled())
+        return result == string::npos ? 1 : 0;
+    else
+        return result == string::npos ? 0 : result;
 }
 
-vector<mathingString> searchAFile(ifstream& file, string whatToSearch)
+vector<mathingString> searchAFile(ifstream& file, string whatToSearch, settings programSettings)
 {
     vector<mathingString> result;
     string lineToSearch;
+    int counter = 0;
 
     while (!file.eof())
     {
+        counter++;
         getline(file, lineToSearch);
-        int lineSearchResult = searchAString(lineToSearch, whatToSearch);
+
+        if(!programSettings.isCaseSensitivityEnabled())
+            transform(lineToSearch.cbegin(), lineToSearch.cend(), lineToSearch.begin(), tolower);
+
+        int lineSearchResult = searchAString(lineToSearch, whatToSearch, programSettings);
 
         if (lineSearchResult > 0)
         {
-            mathingString res = {lineSearchResult, lineToSearch};
+            mathingString res = { counter, lineToSearch};
             result.push_back(res);
         }
     }
-
     return result;
 }
 
 int main(int argc, char *argv[])
 {
-    vector<mathingString> result;
-    string whatToSearch;
-
     try
     {
+        string whatToSearch;
+        settings programSettings = {};
         //We want to use this input method only 
         // when program started witout arguments
         if (argc == 1)
@@ -144,7 +153,7 @@ int main(int argc, char *argv[])
             cout << "Give search string: \n";
             getline(cin, whatToSearch);
 
-            result = searchAString(searchFrom, whatToSearch);
+            result = searchAString(searchFrom, whatToSearch, programSettings);
             if (result > 0)
             {
                 cout << "\""
@@ -167,28 +176,34 @@ int main(int argc, char *argv[])
 
         //We always want to use last arguments as file name
         ifstream textFileToSearch(argv[argc - 1], std::ifstream::in);
-        settings programSettings = {};
+        vector<mathingString> result;
 
+        //We always want to use last but one argument as string to search
+        whatToSearch = argv[argc - 2];
         if (!textFileToSearch.is_open())
             throw exception("File not found");
 
         if(argc > 3)
             processSettings(argv[argc - 3], &programSettings);
 
-        //We always want to use last but one argument as string to search
-        result = searchAFile(textFileToSearch, argv[argc - 2]);
+        if(!programSettings.isCaseSensitivityEnabled())
+            transform(whatToSearch.cbegin(), whatToSearch.cend(), whatToSearch.begin(), tolower);
+        
+        result = searchAFile(textFileToSearch, whatToSearch, programSettings);
         textFileToSearch.close();
 
-        for (uint_fast8_t i = 0; i < result.size(); i++)
+        for (int i = 0; i < result.size(); i++)
         {
             if(programSettings.isDisplayLineNumbersEnabled())
 				cout << result[i].index << ":     ";
             cout << result[i].line << " \n";
-
         }
         
         if(programSettings.isDisplayOccurenceAmountEnabled())
-            cout << "Occurrences of lines containing "<< whatToSearch << ": " << result.size() << "\n";
+            if(programSettings.isReverceSearchEnabled())
+				cout << "Occurrences of lines NOT containing \""<< whatToSearch << "\": " << result.size() << "\n";
+			else
+				cout << "Occurrences of lines containing \""<< whatToSearch << "\": " << result.size() << "\n";
 
         if(result.size() == 0)
 		{
